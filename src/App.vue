@@ -25,12 +25,22 @@ const themeOverrides = {
   },
   Select: {
     peers: {
-      InternalSelection: {
-        textColor: '#18A058',
-      },
+      // 下拉框样式
+      // InternalSelection: {
+      //   textColor: '#18A058',
+      // },
     },
   },
 };
+
+const isMaximized = ref(false);
+
+// 监听窗口最大化状态
+appWindow.onResized(() => {
+  appWindow.isMaximized().then((maximized) => {
+    isMaximized.value = maximized;
+  });
+});
 </script>
 
 <template>
@@ -49,7 +59,29 @@ const themeOverrides = {
         id="titlebar-maximize"
         @click="() => appWindow.toggleMaximize()"
       >
-        <mdui-icon-crop-square></mdui-icon-crop-square>
+        <template v-if="isMaximized">
+          <!-- 还原图标  -->
+          <svg
+            t="1734255167103"
+            class="icon"
+            viewBox="0 0 1024 1024"
+            version="1.1"
+            xmlns="http://www.w3.org/2000/svg"
+            p-id="19598"
+            width="200"
+            height="200"
+          >
+            <path
+              d="M416 128a32 32 0 0 0 0 64h192A224 224 0 0 1 832 416v192a32 32 0 0 0 64 0v-192A288 288 0 0 0 608 128h-192z"
+              p-id="19599"
+            ></path>
+            <path
+              d="M288 256A160 160 0 0 0 128 416v320A160 160 0 0 0 288 896h320a160 160 0 0 0 160-160v-320A160 160 0 0 0 608 256h-320zM192 416A96 96 0 0 1 288 320h320A96 96 0 0 1 704 416v320A96 96 0 0 1 608 832h-320A96 96 0 0 1 192 736v-320z"
+              p-id="19600"
+            ></path>
+          </svg>
+        </template>
+        <mdui-icon-crop-square v-else></mdui-icon-crop-square>
       </div>
       <div
         class="titlebar-button"
@@ -92,6 +124,10 @@ $danger-color: #ff4d4f;
   left: 0;
   right: 0;
 
+  &[data-tauri-drag-region] {
+    -webkit-app-region: drag;
+  }
+
   &-button {
     display: inline-flex;
     justify-content: center;
@@ -101,6 +137,7 @@ $danger-color: #ff4d4f;
     user-select: none;
     -webkit-user-select: none;
     position: relative;
+    -webkit-app-region: no-drag;
 
     &::after {
       content: '';
@@ -135,5 +172,11 @@ $danger-color: #ff4d4f;
       background-color: $danger-color;
     }
   }
+}
+
+.titlebar-button svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
 }
 </style>

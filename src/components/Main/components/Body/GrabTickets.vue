@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, h, computed, onMounted } from 'vue';
 import { RepeatOutline } from '@vicons/ionicons5';
-import { NIcon } from 'naive-ui';
+import { NIcon, NSpin } from 'naive-ui';
 import stationList from '../../../../utils/StationList';
 import { invoke } from '@tauri-apps/api/core';
 import { useTicketStore } from '@/stores';
+
+import type { TrainInfo } from '@/types/TrainInfo';
 
 const ticketStore = useTicketStore();
 
@@ -217,33 +219,16 @@ const handleTrainInfo = (trainInfo: any) => {
   return processedTrains;
 };
 
-interface TrainInfo {
-  trainNumber: string;
-  from: string;
-  to: string;
-  departureTime: string;
-  arrivalTime: string;
-  duration: string;
-  seats: {
-    specialClass: string;
-    firstClass: string;
-    secondClass: string;
-    softSleeper: string;
-    hardSleeper: string;
-    hardSeat: string;
-    noSeat: string;
-  };
-}
-
 const tableData = ref<TrainInfo[]>([]);
+// 1. 首先在 script 部分添加 loading ref
+const loading = ref(false);
 
-// 查询
+// 3. 修改查询函数
 const handleDataSearch = async () => {
   try {
-    // 清空表格数据
+    loading.value = true; // 开始加载
     tableData.value = [];
 
-    // 检查并设置别名
     const fromStation = StationList.value.find(
       (item) => item.label === form.value.from,
     );
@@ -254,7 +239,6 @@ const handleDataSearch = async () => {
     if (fromStation) form.value.from_station = fromStation.alias;
     if (toStation) form.value.to_station = toStation.alias;
 
-    // 格式化日期
     const date = new Date(form.value.date);
     const formattedDate = date
       .toLocaleDateString('zh-CN', {
@@ -273,25 +257,15 @@ const handleDataSearch = async () => {
       },
     });
 
-    // res.data.map是对应的地名, BJP: "北京"
-
-    // 处理数据并更新表格
     const processedData = handleTrainInfo(res);
     tableData.value = processedData;
-
-    // 更新store中的表格数据
     ticketStore.updateTableData(processedData);
   } catch (error) {
     console.error('查询失败:', error);
+  } finally {
+    loading.value = false; // 结束加载
   }
 };
-
-// 在组件挂载时初始化表格数据
-onMounted(() => {
-  if (ticketStore.tableData && ticketStore.tableData.length > 0) {
-    tableData.value = ticketStore.tableData;
-  }
-});
 
 // 监听出发站选择
 const handleFromSelect = (value: string) => {
@@ -308,127 +282,177 @@ const handleToSelect = (value: string) => {
     form.value.to_station = station.alias;
   }
 };
+
+// 日期禁用
+const isDateDisabled = (timestamp: number) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const maxDate = new Date();
+  maxDate.setDate(today.getDate() + 14);
+  maxDate.setHours(23, 59, 59, 999);
+
+  return timestamp < today.getTime() || timestamp > maxDate.getTime();
+};
+
+// 在组件挂载时初始化表格数据
+onMounted(() => {
+  if (ticketStore.tableData && ticketStore.tableData.length > 0) {
+    tableData.value = ticketStore.tableData;
+  }
+});
+
+const filterByDepartureTime = (train: TrainInfo) => {
+  const selectedTime = form.value.time;
+  if (selectedTime === '00:00-24:00') return true;
+  
+  const time = train.departureTime;
+  const [start, end] = selectedTime.split('-');
+  
+  const trainTime = new Date(`2000/01/01 ${time}`);
+  const startTime = new Date(`2000/01/01 ${start}`);
+  const endTime = new Date(`2000/01/01 ${end}`);
+  
+  return trainTime >= startTime && trainTime <= endTime;
+};
+
+const filteredTableData = computed(() => {
+  if (checkedValues.value.length === 0) return [];
+  
+  return tableData.value.filter(train => {
+    // 首先检查发车时间
+    if (!filterByDepartureTime(train)) return false;
+    
+    const trainNumber = train.trainNumber;
+    if (checkedValues.value.includes('高铁/城际') && trainNumber.startsWith('G')) {
+      return true;
+    }
+    if (checkedValues.value.includes('D动车') && trainNumber.startsWith('D')) {
+      return true;
+    }
+    if (checkedValues.value.includes('Z直达') && trainNumber.startsWith('Z')) {
+      return true;
+    }
+    if (checkedValues.value.includes('T特快') && trainNumber.startsWith('T')) {
+      return true;
+    }
+    if (checkedValues.value.includes('K快速') && trainNumber.startsWith('K')) {
+      return true;
+    }
+    // 其他类型的车次
+    if (checkedValues.value.includes('其他') && 
+        !['G', 'D', 'Z', 'T', 'K'].includes(trainNumber[0])) {
+      return true;
+    }
+    return false;
+  });
+});
+
+const emptyText = computed(() => {
+  if (checkedValues.value.length === 0) {
+    return '请选择要查看的车次类型';
+  }
+  return '暂无符合条件的车次';
+});
 </script>
 
 <template>
   <n-card class="grabTickets" title="抢票页面">
-    <n-tabs type="line" animated>
-      <n-tab-pane name="oasis" tab="单程">
-        <n-form inline label-placement="left">
-          <n-grid :cols="36" :x-gap="36">
-            <n-form-item-gi :span="9" label="出发站：" path="from">
-              <n-auto-complete
-                v-model:value="form.from"
-                :options="handleSearch(form.from)"
-                placeholder="请输入车站名称"
-                @select="handleFromSelect"
-              />
-              <!-- 交换按钮 -->
-              <n-button
-                strong
-                secondary
-                round
-                type="primary"
-                :render-icon="renderIcon"
-                style="left: 10px"
-                @click="handleSwap"
-              />
-            </n-form-item-gi>
+    <n-spin :show="loading">
+      <n-tabs type="line" animated>
+        <n-tab-pane name="oasis" tab="单程">
+          <n-form inline label-placement="left">
+            <n-grid :cols="36" :x-gap="36">
+              <n-form-item-gi :span="9" label="出发站：" path="from">
+                <n-auto-complete
+                  v-model:value="form.from"
+                  :options="handleSearch(form.from)"
+                  placeholder="请输入车站名称"
+                  @select="handleFromSelect"
+                />
+                <!-- 交换按钮 -->
+                <n-button
+                  strong
+                  secondary
+                  round
+                  type="primary"
+                  :render-icon="renderIcon"
+                  style="left: 10px"
+                  @click="handleSwap"
+                />
+              </n-form-item-gi>
 
-            <n-form-item-gi :span="8" label="目的地：" path="to">
-              <n-auto-complete
-                v-model:value="form.to"
-                :options="handleSearch(form.to)"
-                placeholder="请输入车站名称"
-                @select="handleToSelect"
-              />
-            </n-form-item-gi>
+              <n-form-item-gi :span="8" label="目的地：" path="to">
+                <n-auto-complete
+                  v-model:value="form.to"
+                  :options="handleSearch(form.to)"
+                  placeholder="请输入车站名称"
+                  @select="handleToSelect"
+                />
+              </n-form-item-gi>
 
-            <n-form-item-gi :span="6" label="日期：" path="form">
-              <n-date-picker
-                v-model:value="form.date"
-                type="date"
-                value-format="yyyy-MM-dd"
-                :default-value="Date.now()"
-                :is-date-disabled="(timestamp: number) => {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  return timestamp < today.getTime();
-                }"
-              />
-            </n-form-item-gi>
+              <n-form-item-gi :span="6" label="日期：" path="form">
+                <n-date-picker
+                  v-model:value="form.date"
+                  type="date"
+                  value-format="yyyy-MM-dd"
+                  :default-value="Date.now()"
+                  :is-date-disabled="isDateDisabled"
+                />
+              </n-form-item-gi>
 
-            <n-form-item-gi :span="6">
-              <n-button type="primary" @click="handleDataSearch">查询</n-button>
-            </n-form-item-gi>
+              <n-form-item-gi :span="6">
+                <n-button type="primary" @click="handleDataSearch"
+                  >查询</n-button
+                >
+              </n-form-item-gi>
 
-            <n-form-item-gi :span="8" label="发车时间：" path="from">
-              <n-select v-model:value="form.time" :options="DepartureTime" />
-            </n-form-item-gi>
+              <n-form-item-gi :span="8" label="发车时间：" path="from">
+                <n-select v-model:value="form.time" :options="DepartureTime" />
+              </n-form-item-gi>
 
-            <n-form-item-gi :span="20" label="筛选：" path="from">
-              <n-checkbox
-                style="margin-right: 10px"
-                :checked="checkAll"
-                @update:checked="handleCheckAll"
-                label="全部"
-              />
-              <n-checkbox-group
-                v-model:value="checkedValues"
-                @update:value="handleCheckedChange"
-              >
-                <n-space item-style="display: flex;">
-                  <n-checkbox
-                    v-for="option in screenOptions"
-                    :key="option"
-                    :value="option"
-                    :label="option"
-                  />
-                </n-space>
-              </n-checkbox-group>
-            </n-form-item-gi>
-          </n-grid>
-        </n-form>
-        <n-data-table
-          size="small"
-          :columns="columns"
-          :data="tableData"
-          :bordered="false"
-          :pagination="{
-            pageSize: 10,
-          }"
-          :max-height="280"
-          :row-key="(row: TrainInfo) => row.trainNumber"
-        />
-      </n-tab-pane>
-      <n-tab-pane name="the beatles" tab="往返"></n-tab-pane>
-      <n-tab-pane name="jay chou" tab="中转换乘"> 七里香 </n-tab-pane>
-      <n-tab-pane name="www" tab="退改签"> 七里香 </n-tab-pane>
-    </n-tabs>
+              <n-form-item-gi :span="20" label="筛选：" path="from">
+                <n-checkbox
+                  style="margin-right: 10px"
+                  :checked="checkAll"
+                  @update:checked="handleCheckAll"
+                  label="全部"
+                />
+                <n-checkbox-group
+                  v-model:value="checkedValues"
+                  @update:value="handleCheckedChange"
+                >
+                  <n-space item-style="display: flex;">
+                    <n-checkbox
+                      v-for="option in screenOptions"
+                      :key="option"
+                      :value="option"
+                      :label="option"
+                    />
+                  </n-space>
+                </n-checkbox-group>
+              </n-form-item-gi>
+            </n-grid>
+          </n-form>
+          <n-data-table
+            size="small"
+            :columns="columns"
+            :data="filteredTableData"
+            :bordered="false"
+            :pagination="{
+              pageSize: 10,
+            }"
+            :max-height="280"
+            :row-key="(row: TrainInfo) => row.trainNumber"
+            :empty="emptyText"
+          />
+        </n-tab-pane>
+        <n-tab-pane name="the beatles" tab="往返"></n-tab-pane>
+        <n-tab-pane name="jay chou" tab="中转乘"> 七里香 </n-tab-pane>
+        <n-tab-pane name="www" tab="退改签"> 七里香 </n-tab-pane>
+      </n-tabs>
+    </n-spin>
   </n-card>
-
-  <!-- 弹窗 -->
-  <!-- <n-modal v-model:show="showModal">
-    <n-card
-      style="width: 600px"
-      title="筛选"
-      :bordered="false"
-      size="huge"
-      role="dialog"
-      aria-modal="true"
-    >
-      <template #header-extra>X</template>
-      <n-checkbox-group v-model:value="cities">
-        <n-space item-style="display: flex;">
-          <n-checkbox value="Beijing" label="北京" />
-          <n-checkbox value="Shanghai" label="上海" />
-          <n-checkbox value="Guangzhou" label="广州" />
-          <n-checkbox value="Shenzen" label="深圳" />
-        </n-space>
-      </n-checkbox-group>
-      <template #footer> 尾部 </template>
-    </n-card>
-  </n-modal> -->
 </template>
 
 <style lang="scss">

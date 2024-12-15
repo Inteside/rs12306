@@ -22,10 +22,12 @@ export const createWindow = (params: CreateWindowParams) => {
 
     // 设置窗口的默认属性
     const defaultOptions = {
-        width: 800,    // 默认窗口宽度
-        height: 600,   // 默认窗口高度
+        width: 1200,    // 默认窗口宽度
+        height: 750,   // 默认窗口高度
         x: 100,        // 默认窗口 x 坐标
         y: 100,        // 默认窗口 y 坐标
+        minWidth: 1200, // 最小宽度
+        minHeight: 750, // 最小高度
         decorations: false,
         resizable: true,
     };
