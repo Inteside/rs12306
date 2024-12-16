@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, h, computed, onMounted } from 'vue';
 import { RepeatOutline } from '@vicons/ionicons5';
-import { NIcon, NSpin } from 'naive-ui';
+import { NIcon, NSpin, useMessage } from 'naive-ui';
 import stationList from '../../../../utils/StationList';
 import { invoke } from '@tauri-apps/api/core';
 import { useTicketStore } from '@/stores';
@@ -73,7 +73,17 @@ const columns = ref([
     key: 'trainNumber',
   },
   {
-    title: '出发站/时间',
+    title: () => {
+      return h('div', { style: 'line-height: 0.7;padding: 4px 0;' }, [
+        h('div', '出发站'),
+        h(
+          'div',
+          { style: 'color: #999; font-size: 12px; margin: 2px 0;' },
+          '---',
+        ),
+        h('div', { style: 'color: #666; font-size: 12px;' }, '时间'),
+      ]);
+    },
     key: 'departure',
     render: (row: any) => {
       return h('div', [
@@ -83,7 +93,17 @@ const columns = ref([
     },
   },
   {
-    title: '到达站/时间',
+    title: () => {
+      return h('div', { style: 'line-height: 0.7; padding: 4px 0;' }, [
+        h('div', '到达站'),
+        h(
+          'div',
+          { style: 'color: #999; font-size: 12px; margin: 2px 0;' },
+          '---',
+        ),
+        h('div', { style: 'color: #666; font-size: 12px;' }, '时间'),
+      ]);
+    },
     key: 'arrival',
     render: (row: any) => {
       return h('div', [
@@ -97,7 +117,17 @@ const columns = ref([
     key: 'duration',
   },
   {
-    title: '商务/特等座',
+    title: () => {
+      return h('div', { style: 'line-height: 0.7; padding: 4px 0;' }, [
+        h('div', '商务座'),
+        h(
+          'div',
+          { style: 'color: #999; font-size: 12px; margin: 2px 0;' },
+          '---',
+        ),
+        h('div', { style: 'color: #666; font-size: 12px;' }, '特等座'),
+      ]);
+    },
     key: 'seats.specialClass',
     render: (row: any) => renderSeat(row.seats.specialClass),
   },
@@ -135,6 +165,18 @@ const columns = ref([
     title: '无座',
     key: 'seats.noSeat',
     render: (row: any) => renderSeat(row.seats.noSeat, true),
+  },
+  {
+    title: '操作',
+    key: 'action',
+    render: (row: any) =>
+      h('div', [
+        h(
+          'n-button',
+          { type: 'primary', onClick: () => handleToSelect(row) },
+          '选择',
+        ),
+      ]),
   },
 ]);
 
@@ -183,27 +225,30 @@ const handleSearch = computed(() => {
 // 处理车次信息逻辑
 const handleTrainInfo = (trainInfo: any) => {
   const allTrains = trainInfo.data.result;
-  // 站名映射对象
   const alias = trainInfo.data.map;
   const processedTrains = [];
 
   for (const oneTrain of allTrains) {
     const dataList = oneTrain.split('|');
-    console.log(dataList);
-    // 使用alias映射转换站名
-    const fromStation = alias[dataList[6]] || dataList[6];
-    const toStation = alias[dataList[7]] || dataList[7];
+
+    // 查找商务座数据
+    let specialClassSeat = '--';
+    if (dataList[32] && dataList[32] !== '') {
+      specialClassSeat = dataList[32];
+    } else if (dataList[25] && dataList[25] !== '') {
+      specialClassSeat = dataList[25];
+    }
 
     const trainData = {
       trainNumber: dataList[3],
-      from: fromStation, // 使用转换后的站名
-      to: toStation, // 使用转换后的站名
+      from: alias[dataList[6]] || dataList[6], // 使用转换后的站名
+      to: alias[dataList[7]] || dataList[7], // 使用转换后的站名
       departureTime: dataList[8],
       arrivalTime: dataList[9],
       duration: dataList[10],
       seats: {
-        PreferredFirstClassSeat: dataList[20] || '--', // 优选一等座
-        specialClass: dataList[32] || '--', // 商务/特等座
+        PreferredFirstClassSeat: dataList[21] || '--', // 优选一等座
+        specialClass: specialClassSeat, // 商务/特等座
         firstClass: dataList[31] || '--', // 一等座
         secondClass: dataList[30] || '--', // 二等座
         softSleeper: dataList[23] || '--', // 软卧
@@ -220,10 +265,10 @@ const handleTrainInfo = (trainInfo: any) => {
 };
 
 const tableData = ref<TrainInfo[]>([]);
-// 1. 首先在 script 部分添加 loading ref
+// 加载中
 const loading = ref(false);
 
-// 3. 修改查询函数
+// 修改查询函数
 const handleDataSearch = async () => {
   try {
     loading.value = true; // 开始加载
@@ -275,7 +320,7 @@ const handleFromSelect = (value: string) => {
   }
 };
 
-// 监听目的地选择
+// 听目的地选择
 const handleToSelect = (value: string) => {
   const station = StationList.value.find((item) => item.value === value);
   if (station) {
@@ -305,26 +350,29 @@ onMounted(() => {
 const filterByDepartureTime = (train: TrainInfo) => {
   const selectedTime = form.value.time;
   if (selectedTime === '00:00-24:00') return true;
-  
+
   const time = train.departureTime;
   const [start, end] = selectedTime.split('-');
-  
+
   const trainTime = new Date(`2000/01/01 ${time}`);
   const startTime = new Date(`2000/01/01 ${start}`);
   const endTime = new Date(`2000/01/01 ${end}`);
-  
+
   return trainTime >= startTime && trainTime <= endTime;
 };
 
 const filteredTableData = computed(() => {
   if (checkedValues.value.length === 0) return [];
-  
-  return tableData.value.filter(train => {
+
+  return tableData.value.filter((train) => {
     // 首先检查发车时间
     if (!filterByDepartureTime(train)) return false;
-    
+
     const trainNumber = train.trainNumber;
-    if (checkedValues.value.includes('高铁/城际') && trainNumber.startsWith('G')) {
+    if (
+      checkedValues.value.includes('高铁/城际') &&
+      trainNumber.startsWith('G')
+    ) {
       return true;
     }
     if (checkedValues.value.includes('D动车') && trainNumber.startsWith('D')) {
@@ -340,14 +388,28 @@ const filteredTableData = computed(() => {
       return true;
     }
     // 其他类型的车次
-    if (checkedValues.value.includes('其他') && 
-        !['G', 'D', 'Z', 'T', 'K'].includes(trainNumber[0])) {
+    if (
+      checkedValues.value.includes('其他') &&
+      !['G', 'D', 'Z', 'T', 'K'].includes(trainNumber[0])
+    ) {
       return true;
     }
     return false;
   });
 });
 
+const message = useMessage();
+
+const rowProps = (row: TrainInfo) => {
+  return {
+    style: 'cursor: pointer;',
+    onClick: (row: TrainInfo) => {
+      message.info('被点击');
+    },
+  };
+};
+
+// 空数据
 const emptyText = computed(() => {
   if (checkedValues.value.length === 0) {
     return '请选择要查看的车次类型';
@@ -439,6 +501,7 @@ const emptyText = computed(() => {
             :columns="columns"
             :data="filteredTableData"
             :bordered="false"
+            :row-props="rowProps"
             :pagination="{
               pageSize: 10,
             }"
@@ -447,9 +510,9 @@ const emptyText = computed(() => {
             :empty="emptyText"
           />
         </n-tab-pane>
-        <n-tab-pane name="the beatles" tab="往返"></n-tab-pane>
+        <!-- <n-tab-pane name="the beatles" tab="往返"></n-tab-pane>
         <n-tab-pane name="jay chou" tab="中转乘"> 七里香 </n-tab-pane>
-        <n-tab-pane name="www" tab="退改签"> 七里香 </n-tab-pane>
+        <n-tab-pane name="www" tab="退改签"> 七里香 </n-tab-pane> -->
       </n-tabs>
     </n-spin>
   </n-card>

@@ -91,13 +91,16 @@ appWindow.onResized(() => {
         <mdui-icon-close />
       </div>
     </div>
+
     <n-config-provider
       :locale="zhCN"
       :theme-overrides="themeOverrides"
       :date-locale="dateZhCN"
       :theme="undefined"
     >
-      <router-view></router-view>
+      <n-message-provider>
+        <router-view></router-view>
+      </n-message-provider>
       <!-- 全局样式 -->
       <n-global-style />
     </n-config-provider>
@@ -111,6 +114,7 @@ $danger-color: #ff4d4f;
 * {
   padding: 0;
   margin: 0;
+  user-select: none; // 禁止用户选择文本
 }
 
 .titlebar {
