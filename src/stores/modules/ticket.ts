@@ -24,7 +24,7 @@ export const useTicketStore = defineStore('ticket', {
         formData: {
             from: '',
             to: '',
-            date: Date.now(),
+            date: '',
             time: '00:00-24:00',
             from_station: '',
             to_station: '',
@@ -33,7 +33,7 @@ export const useTicketStore = defineStore('ticket', {
         checkAll: true,
         tableData: [] as TrainInfo[],
     }),
-    
+
     actions: {
         updateFormData(data: any) {
             this.formData = { ...this.formData, ...data };
@@ -47,7 +47,11 @@ export const useTicketStore = defineStore('ticket', {
         updateTableData(data: any[]) {
             this.tableData = data;
         },
+        // 返回车次数据
+        getTicketData() {
+            return this.formData;
+        }
     },
-    
+
     persist: true
 });

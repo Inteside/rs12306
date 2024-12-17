@@ -8,19 +8,19 @@ interface LoginResponse {
 }
 
 // 获取二维码
-export const fetchBaseImg = (appid: string) => request.post('/create-qr64', { appid });
+export const fetchBaseImg = (appid: string) => request.post('/passport/web/create-qr64', { appid });
 
 // 检查二维码状态
-export const fetchCheckqr = (uuid: string, appid: string) => request.post('/checkqr', { uuid, appid });
+export const fetchCheckqr = (uuid: string, appid: string) => request.post('/passport/web/checkqr', { uuid, appid });
 
 // 检查登录验证
 export const fetchLoginVerify = ({ username }: any) =>
-    request.post<LoginResponse>('/checkLoginVerify', { username, appid: 'otn' });
+    request.post<LoginResponse>('/passport/web/checkLoginVerify', { username, appid: 'otn' });
 
 // 发送验证码
-export const fetchSendCode = (username: string, castNum: string) => request.post('/getMessageCode', { appid: 'otn', username, castNum });
+export const fetchSendCode = (username: string, castNum: string) => request.post('/passport/web/getMessageCode', { appid: 'otn', username, castNum });
 
 // 登录
-export const fetchLogin = (randCode: string, username: string, password: string) => request.post('/login', { appid: 'otn', checkMode: 0, randCode, username, password });
+export const fetchLogin = (randCode: string, username: string, password: string) => request.post('/passport/web/login', { appid: 'otn', checkMode: 0, randCode, username, password });
 
 

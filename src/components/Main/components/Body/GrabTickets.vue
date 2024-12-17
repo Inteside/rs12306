@@ -1,14 +1,39 @@
 <script setup lang="ts">
 import { ref, h, computed, onMounted } from 'vue';
 import { RepeatOutline } from '@vicons/ionicons5';
-import { NIcon, NSpin, useMessage } from 'naive-ui';
+import { NIcon, NSpin, useMessage, NButton, useModal } from 'naive-ui';
 import stationList from '../../../../utils/StationList';
 import { invoke } from '@tauri-apps/api/core';
-import { useTicketStore } from '@/stores';
-
-import type { TrainInfo } from '@/types/TrainInfo';
+import { useTicketStore } from '@/stores/index';
+import dayjs from 'dayjs';
+import type { TrainInfo, Song } from '@/types/TrainInfo';
 
 const ticketStore = useTicketStore();
+const message = useMessage();
+const modal = useModal();
+
+// 初始化模态框
+const showDialogPreset = async (row: Song) => {
+  modal.create({
+    title: '车次详情',
+    preset: 'dialog',
+    content: row.from,
+    style: {
+      width: '500px',
+      height: '500px',
+    },
+  });
+  console.log('本地存储:', ticketStore.getTicketData());
+  const formData = ticketStore.getTicketData();
+  // 格式化日期
+  const date = dayjs(formData.date).format('YYYY-MM-DD');
+  const res = await invoke('fetch_ticket_price', {
+    trainDate: date,
+    fromStation: formData.from_station,
+    toStation: formData.to_station,
+  });
+  console.log('我是票价', res);
+};
 
 // 使用 store 中的状态
 const form = computed({
@@ -37,6 +62,10 @@ const screenOptions = ref([
   '其他',
 ]);
 
+// 车次数据
+const tableData = ref<TrainInfo[]>([]);
+// 加载中
+const loading = ref(false);
 // 发车时间
 const DepartureTime = ref([
   { label: '00:00-24:00', value: '00:00-24:00' },
@@ -101,7 +130,7 @@ const columns = ref([
           { style: 'color: #999; font-size: 12px; margin: 2px 0;' },
           '---',
         ),
-        h('div', { style: 'color: #666; font-size: 12px;' }, '时间'),
+        h('div', { style: 'color: #666; font-size: 12px;' }, '时��'),
       ]);
     },
     key: 'arrival',
@@ -169,14 +198,18 @@ const columns = ref([
   {
     title: '操作',
     key: 'action',
-    render: (row: any) =>
-      h('div', [
-        h(
-          'n-button',
-          { type: 'primary', onClick: () => handleToSelect(row) },
-          '选择',
-        ),
-      ]),
+    render: (row: Song) =>
+      h(
+        NButton,
+        {
+          strong: true,
+          tertiary: true,
+          type: 'primary',
+          size: 'small',
+          onClick: () => showDialogPreset(row),
+        },
+        { default: () => '详情' },
+      ),
   },
 ]);
 
@@ -263,10 +296,6 @@ const handleTrainInfo = (trainInfo: any) => {
 
   return processedTrains;
 };
-
-const tableData = ref<TrainInfo[]>([]);
-// 加载中
-const loading = ref(false);
 
 // 修改查询函数
 const handleDataSearch = async () => {
@@ -397,8 +426,6 @@ const filteredTableData = computed(() => {
     return false;
   });
 });
-
-const message = useMessage();
 
 const rowProps = (row: TrainInfo) => {
   return {

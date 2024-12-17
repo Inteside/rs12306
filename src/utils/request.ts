@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useUserStore } from '../stores/index';
 
 const instance = axios.create({
-    baseURL: 'https://kyfw.12306.cn/passport/web',
+    baseURL: 'https://kyfw.12306.cn',
     timeout: 1000,
     withCredentials: true,
     headers: {

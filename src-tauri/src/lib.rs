@@ -11,6 +11,7 @@ pub fn run() {
             api::user::fetch_qr_get_tk,
             api::user::fetch_pwd_get_tk,
             api::grab_tickets::fetch_grab_tickets,
+            api::fetch_ticket_price::fetch_ticket_price,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

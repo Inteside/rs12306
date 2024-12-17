@@ -7,3 +7,16 @@ export interface TrainInfo {
   duration: string;
   seats: Seats;
 }
+
+export interface Song {
+  no: number;
+  title: string;
+  length: string;
+  from: string;
+}
+
+export interface TicketPrice {
+  data: {
+    price: string;
+  };
+}

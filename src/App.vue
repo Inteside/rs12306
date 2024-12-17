@@ -98,9 +98,11 @@ appWindow.onResized(() => {
       :date-locale="dateZhCN"
       :theme="undefined"
     >
-      <n-message-provider>
-        <router-view></router-view>
-      </n-message-provider>
+      <n-modal-provider>
+        <n-message-provider>
+          <router-view></router-view>
+        </n-message-provider>
+      </n-modal-provider>
       <!-- 全局样式 -->
       <n-global-style />
     </n-config-provider>

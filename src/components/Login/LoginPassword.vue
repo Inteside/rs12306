@@ -28,8 +28,10 @@ const createMainWindow = () => {
     label: 'index',
     url: '#/index',
     title: '主界面',
-    width: 1200,
+    width: 1300,
     height: 700,
+    x: 100,
+    y: 100,
     decorations: false,
     resizable: true,
   });
