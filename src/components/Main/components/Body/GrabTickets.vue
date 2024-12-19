@@ -12,8 +12,75 @@ const ticketStore = useTicketStore();
 const message = useMessage();
 const modal = useModal();
 
+// 车次数据
+const tableData = ref<TrainInfo[]>([]);
+// 加载中
+const loading = ref(false);
+
+// 获取车票价格
+const getTicketPrice = async () => {
+  const formData = ticketStore.getTicketData();
+  const date = dayjs(formData.date).format('YYYY-MM-DD');
+  const res = await invoke('fetch_ticket_price', {
+    trainDate: date,
+    fromStation: formData.from_station,
+    toStation: formData.to_station,
+  });
+  console.log('打印一下车票价格', JSON.parse(res as string));
+  return res;
+};
+
+// 处理车票价格函数
+const handleTicketPrice = (res: any) => {
+  // 添加价格格式化辅助函数
+  const formatPrice = (price: string | null | undefined): string => {
+    if (!price || price === '--') return '--';
+    // 移除前导零并转换为数字
+    const numPrice = parseFloat(price.replace(/^0+/, ''));
+    // 除以10并保留一位小数
+    return (numPrice / 10).toFixed(1);
+  };
+
+  const jsonData = JSON.parse(res);
+  const priceData: Record<string, any> = {};
+
+  if (jsonData.data && Array.isArray(jsonData.data)) {
+    jsonData.data.forEach((item: any) => {
+      const trainInfo = item.queryLeftNewDTO;
+      if (trainInfo) {
+        const trainNumber = trainInfo.station_train_code;
+        priceData[trainNumber] = {
+          trainInfo: {
+            fromStation: trainInfo.from_station_name,
+            toStation: trainInfo.to_station_name,
+            fromStationCode: trainInfo.from_station_telecode,
+            toStationCode: trainInfo.to_station_telecode,
+            trainNumber: trainNumber,
+          },
+          prices: {
+            商务座: formatPrice(trainInfo.swz_price),
+            特等座: formatPrice(trainInfo.tz_price),
+            优选一等座: formatPrice(trainInfo.bxrz_price),
+            一等座: formatPrice(trainInfo.zy_price),
+            二等座: formatPrice(trainInfo.ze_price),
+            硬卧: formatPrice(trainInfo.yw_price),
+            高级软卧: formatPrice(trainInfo.gr_price),
+            软卧: formatPrice(trainInfo.rw_price),
+            无座: formatPrice(trainInfo.wz_price),
+            硬座: formatPrice(trainInfo.yz_price),
+          },
+        };
+      }
+    });
+  }
+
+  return priceData;
+};
+
 // 初始化模态框
 const showDialogPreset = async (row: Song) => {
+  console.log(await getTicketPrice());
+
   modal.create({
     title: '车次详情',
     preset: 'dialog',
@@ -23,16 +90,54 @@ const showDialogPreset = async (row: Song) => {
       height: '500px',
     },
   });
-  console.log('本地存储:', ticketStore.getTicketData());
-  const formData = ticketStore.getTicketData();
-  // 格式化日期
-  const date = dayjs(formData.date).format('YYYY-MM-DD');
-  const res = await invoke('fetch_ticket_price', {
-    trainDate: date,
-    fromStation: formData.from_station,
-    toStation: formData.to_station,
-  });
-  console.log('我是票价', res);
+};
+
+// 添加一个响应式变量存储票价数据
+const ticketPrices = ref<Record<string, any>>({});
+
+// 修改渲染展开函数
+const renderExpand = (row: TrainInfo) => {
+  // 如果没有该车次的票价数据,就去获取
+  if (!ticketPrices.value[row.trainNumber]) {
+    getTicketPrice()
+      .then((res) => {
+        const priceData = handleTicketPrice(res);
+        ticketPrices.value[row.trainNumber] = priceData[row.trainNumber];
+      })
+      .catch((err) => {
+        console.error('获取票价失败:', err);
+      });
+  }
+
+  const priceInfo = ticketPrices.value[row.trainNumber];
+
+  if (!priceInfo) {
+    return h('div', { class: 'loading-price' }, '正在加载票价信息...');
+  }
+
+  return h('div', { class: 'ticket-price-details' }, [
+    h('div', { class: 'train-basic-info' }, [
+      h(
+        'span',
+        `${priceInfo.trainInfo.fromStation} → ${priceInfo.trainInfo.toStation}`,
+      ),
+      h('span', { style: 'margin-left: 20px' }, `车次：${row.trainNumber}`),
+    ]),
+    h(
+      'div',
+      { class: 'price-grid' },
+      Object.entries(priceInfo.prices)
+        .map(
+          ([seatType, price]) =>
+            price !== '--' &&
+            h('div', { class: 'price-item' }, [
+              h('span', { class: 'seat-type' }, seatType),
+              h('span', { class: 'price-value' }, `￥${price}`),
+            ]),
+        )
+        .filter(Boolean),
+    ),
+  ]);
 };
 
 // 使用 store 中的状态
@@ -62,10 +167,6 @@ const screenOptions = ref([
   '其他',
 ]);
 
-// 车次数据
-const tableData = ref<TrainInfo[]>([]);
-// 加载中
-const loading = ref(false);
 // 发车时间
 const DepartureTime = ref([
   { label: '00:00-24:00', value: '00:00-24:00' },
@@ -95,11 +196,23 @@ const renderSeat = (value: string, isNoSeat: boolean = false) => {
     : value;
 };
 
-// 表格头
+// 格头
 const columns = ref([
   {
-    title: '车次',
+    type: 'expand',
+    expandable: () => true,
+    renderExpand: renderExpand,
+  },
+  {
+    title: () => {
+      return h('div', { style: 'line-height: 0.7;padding: 4px 0;' }, [
+        h('div', '车次'),
+      ]);
+    },
     key: 'trainNumber',
+    render: (row: TrainInfo) => {
+      return h('div', row.trainNumber);
+    },
   },
   {
     title: () => {
@@ -130,7 +243,7 @@ const columns = ref([
           { style: 'color: #999; font-size: 12px; margin: 2px 0;' },
           '---',
         ),
-        h('div', { style: 'color: #666; font-size: 12px;' }, '时��'),
+        h('div', { style: 'color: #666; font-size: 12px;' }, '时间'),
       ]);
     },
     key: 'arrival',
@@ -280,7 +393,7 @@ const handleTrainInfo = (trainInfo: any) => {
       arrivalTime: dataList[9],
       duration: dataList[10],
       seats: {
-        PreferredFirstClassSeat: dataList[21] || '--', // 优选一等座
+        PreferredFirstClassSeat: dataList[21] || '--', // 一等座
         specialClass: specialClassSeat, // 商务/特等座
         firstClass: dataList[31] || '--', // 一等座
         secondClass: dataList[30] || '--', // 二等座
@@ -297,10 +410,10 @@ const handleTrainInfo = (trainInfo: any) => {
   return processedTrains;
 };
 
-// 修改查询函数
+// 查询函数
 const handleDataSearch = async () => {
   try {
-    loading.value = true; // 开始加载
+    loading.value = true;
     tableData.value = [];
 
     const fromStation = StationList.value.find(
@@ -313,14 +426,9 @@ const handleDataSearch = async () => {
     if (fromStation) form.value.from_station = fromStation.alias;
     if (toStation) form.value.to_station = toStation.alias;
 
-    const date = new Date(form.value.date);
-    const formattedDate = date
-      .toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      })
-      .replace(/\//g, '-');
+    // 格式化日期
+    const formattedDate = dayjs(form.value.date).format('YYYY-MM-DD');
+    // console.log('格式化日期', formattedDate);
 
     const res: any = await invoke('fetch_grab_tickets', {
       params: {
@@ -331,17 +439,19 @@ const handleDataSearch = async () => {
       },
     });
 
+    console.log('我是res', res);
+
     const processedData = handleTrainInfo(res);
     tableData.value = processedData;
     ticketStore.updateTableData(processedData);
   } catch (error) {
     console.error('查询失败:', error);
   } finally {
-    loading.value = false; // 结束加载
+    loading.value = false;
   }
 };
 
-// 监听出发站选择
+// 监听出发选择
 const handleFromSelect = (value: string) => {
   const station = StationList.value.find((item) => item.value === value);
   if (station) {
@@ -390,6 +500,7 @@ const filterByDepartureTime = (train: TrainInfo) => {
   return trainTime >= startTime && trainTime <= endTime;
 };
 
+// 筛选
 const filteredTableData = computed(() => {
   if (checkedValues.value.length === 0) return [];
 
@@ -427,11 +538,16 @@ const filteredTableData = computed(() => {
   });
 });
 
+// 行属性
 const rowProps = (row: TrainInfo) => {
   return {
-    style: 'cursor: pointer;',
-    onClick: (row: TrainInfo) => {
-      message.info('被点击');
+    onClick: () => {
+      const key = row.trainNumber;
+      if (expandedRowKeys.value.includes(key)) {
+        expandedRowKeys.value = expandedRowKeys.value.filter((k) => k !== key);
+      } else {
+        expandedRowKeys.value = [...expandedRowKeys.value, key];
+      }
     },
   };
 };
@@ -443,6 +559,14 @@ const emptyText = computed(() => {
   }
   return '暂无符合条件的车次';
 });
+
+// 添加展开行的控制
+const expandedRowKeys = ref<string[]>([]);
+
+// 添加展开行处理函数
+const handleExpandedRowKeysChange = (keys: string[]) => {
+  expandedRowKeys.value = keys;
+};
 </script>
 
 <template>
@@ -535,6 +659,8 @@ const emptyText = computed(() => {
             :max-height="280"
             :row-key="(row: TrainInfo) => row.trainNumber"
             :empty="emptyText"
+            :expanded-row-keys="expandedRowKeys"
+            @update:expanded-row-keys="handleExpandedRowKeysChange"
           />
         </n-tab-pane>
         <!-- <n-tab-pane name="the beatles" tab="往返"></n-tab-pane>
@@ -550,5 +676,45 @@ const emptyText = computed(() => {
   width: 95%;
   margin: 0 auto;
   margin-bottom: 16px;
+
+  .ticket-price-details {
+    padding: 16px;
+
+    .train-basic-info {
+      margin-bottom: 16px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .price-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+
+      .price-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 16px;
+        background-color: #f5f7fa;
+        border-radius: 4px;
+
+        .seat-type {
+          color: #666;
+        }
+
+        .price-value {
+          color: #f56c6c;
+          font-weight: 500;
+        }
+      }
+    }
+  }
+
+  .loading-price {
+    padding: 16px;
+    text-align: center;
+    color: #909399;
+  }
 }
 </style>
