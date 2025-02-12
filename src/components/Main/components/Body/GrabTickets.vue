@@ -319,7 +319,10 @@ const columns = ref([
           tertiary: true,
           type: 'primary',
           size: 'small',
-          onClick: () => showDialogPreset(row),
+          onClick: (e) => {
+            e.stopPropagation();
+            showDialogPreset(row);
+          },
         },
         { default: () => '详情' },
       ),
@@ -560,10 +563,10 @@ const emptyText = computed(() => {
   return '暂无符合条件的车次';
 });
 
-// 添加展开行的控制
+// 展开行
 const expandedRowKeys = ref<string[]>([]);
 
-// 添加展开行处理函数
+// 展开行
 const handleExpandedRowKeysChange = (keys: string[]) => {
   expandedRowKeys.value = keys;
 };
